@@ -1,0 +1,1057 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>The Cabinet — Perfume Ledger</title>
+<link rel="icon" href="data:,">
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  html, body { margin: 0; padding: 0; background: #12201B; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo, useCallback } = React;
+
+/* ===================== TINY ICON SET (replaces lucide-react for standalone use) ===================== */
+
+function Droplet({ size = 16, color = "currentColor", fill = "none", strokeWidth = 1.75 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2.5c4 5 7 8.6 7 12.3a7 7 0 1 1-14 0c0-3.7 3-7.3 7-12.3z" />
+    </svg>
+  );
+}
+function FlaskConical({ size = 16, color = "currentColor" }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 2h6M10 2v6l-5.5 9.5A2 2 0 0 0 6.2 21h11.6a2 2 0 0 0 1.7-3.5L14 8V2" />
+      <path d="M7.5 15h9" />
+    </svg>
+  );
+}
+function Search({ size = 16, color = "currentColor" }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" />
+    </svg>
+  );
+}
+function X({ size = 16, color = "currentColor" }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 6 6 18M6 6l12 12" />
+    </svg>
+  );
+}
+function Plus({ size = 16, color = "currentColor" }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+function Check({ size = 16, color = "currentColor" }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
+function Wind({ size = 16, color = "currentColor" }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 8h11a3 3 0 1 0-3-3M3 16h15a3 3 0 1 1-3 3M3 12h8" />
+    </svg>
+  );
+}
+function Sparkles({ size = 16, color = "currentColor" }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={color} stroke="none">
+      <path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2z" />
+    </svg>
+  );
+}
+
+/* ===================== STORAGE SHIM (Netlify Function + Blobs instead of Claude artifact storage) ===================== */
+
+window.storage = {
+  async get(key) {
+    try {
+      const res = await fetch("/api/collection");
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (!data || Object.keys(data).length === 0) return null;
+      return { key, value: JSON.stringify(data) };
+    } catch (e) {
+      return null;
+    }
+  },
+  async set(key, value) {
+    try {
+      const res = await fetch("/api/collection", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: value,
+      });
+      if (!res.ok) return null;
+      return { key, value };
+    } catch (e) {
+      return null;
+    }
+  },
+};
+
+/* ===================== CATALOG DATA ===================== */
+/* [name, "inspired by, brand"] — transcribed from Craftier Perfumes collections */
+
+const WOMEN = [
+["Lemon Flowers","Donna Born In Roma Yellow Dream, Valentino"],
+["Violet Iris","Insolence, Guerlain"],
+["Velvet Floral","Flowerbomb, Viktor&Rolf"],
+["Velvet Cherry","Black Opium Over Red, Yves Saint Laurent"],
+["Tuberose Vanilla","L'Interdit, Givenchy"],
+["Tropical Vanilla","Power of You, Giorgio Armani"],
+["Tropical Peony","La Bomba, Carolina Herrera"],
+["Tonka Vanilla","La Belle Le Parfum, Jean Paul Gaultier"],
+["Tea Vanilla","Donna Born In Roma Green Stravaganza, Valentino"],
+["Sweety Vanilla","The Only One, Craftier"],
+["Sweety Rose","La Nuit Trésor, Lancome"],
+["Sweety Pink Jasmine","Miss Cherie, Dior"],
+["Sweety Pear","La Vie Est Belle, Lancome"],
+["Sweety Jasmine","Lady Million Lucky, Paco Rabanne"],
+["Sweety Honey","Scandal, Jean Paul Gaultier"],
+["Sweety Caramel","L'Extase, Nina Ricci"],
+["Sweety Almond","Girl of Now, Elie Saab"],
+["Spicy Vanilla","Black Opium, Yves Saint Laurent"],
+["Rosy Peony","Miss Blooming Bouquet, Dior"],
+["Rosy Musk","Roses Musk, Montale"],
+["Rose Patchouli","Good Girl Blush Elixir EDP, Carolina Herrera"],
+["Rose Amber","Midnight Poison, Dior"],
+["Raspberry Jasmine","So Scandal, Jean Paul Gaultier"],
+["Powdery Violet","Crystal Noir, Versace"],
+["Powdery Vetiver","Narciso Rouge, Narciso Rodriguez"],
+["Powdery Vanilla","Olympea, Paco Rabanne"],
+["Powdery Orris Root","Enigma, Roja Dove"],
+["Pear Tuberose","Woman By Ralph, Ralph Lauren"],
+["Pear Jasmine","Paradoxe, Prada"],
+["Pear Freesia","English Pear & Freesia, Jo Malone"],
+["Peach Jasmine","Rush, Gucci"],
+["Orchid Lavender","Libre Intense, Yves Saint Laurent"],
+["Orange Tuberose","My Way Intense, Giorgio Armani"],
+["Orange Sandalwood","Coco Noir, Chanel"],
+["Orange Almond","Poison Girl, Dior"],
+["Neroli Marshmallow","Love Don't Be Shy, By Kilian"],
+["Musky Sandalwood","Narciso Rodriguez For Her EDP, Narciso Rodriguez"],
+["Musky Petalia","Valaya, Parfums de Marly"],
+["Musky Pepper","212 Sexy, Carolina Herrera"],
+["Musky Orange Blossom","Narciso Rodriguez For Her EDT, Narciso Rodriguez"],
+["Musky Jasmine","Chance, Chanel"],
+["Marigold Jasmine","C, Clive Christian"],
+["Mandarin Gardenia","Voce Viva, Valentino"],
+["Mahonial Pear","Dylan Purple, Versace"],
+["Magnolian Incense","Queen of Silk, Creed"],
+["Litchi Rose","Magnetism, Escada"],
+["Lavendery Patchouli","Serpentine, Roberto Cavalli"],
+["Lavender Vanilla","Goddess, Burberry"],
+["Jasmine Vanilla","Good Fortune, Viktor&Rolf"],
+["Jasmine Neroli","No. 5, Chanel"],
+["Jasmine Grapefruit","Chance Eau Tendre EDP, Chanel"],
+["Jasmine Gardenia","Pure Poison, Dior"],
+["Jasmine Ambery","Alien, Thierry Mugler"],
+["Green Vanilla","Aura, Thierry Mugler"],
+["Gardenia Leather","La Panthere Legere EDP, Cartier"],
+["Fruity Vanilla","Paradoxe Intense, Prada"],
+["Fruity Rose","Delina Exclusif, Parfums de Marly"],
+["Fruity Raspberry","212 VIP Party Fever, Carolina Herrera"],
+["Fruity Peony","Bombshell, Victoria Secret"],
+["Fruity Patchouli","Flora Gorgeous Gardenia, Gucci"],
+["Fruity Jasmine","Fame, Paco Rabanne"],
+["Fresh Florals","Blanche, Byredo"],
+["Floriental Vanille","Cavalli, Roberto Cavalli"],
+["Floriental Bergamot","Idole, Lancome"],
+["Floral Vanilla","L'Interdit EDP Intense, Givenchy"],
+["Floral Opoponax","Coco Mademoiselle, Chanel"],
+["Floral Musk","My Way, Giorgio Armani"],
+["Floral Mandarin","J'adore, Dior"],
+["Floral Magnolia","All of Me, Narciso Rodriguez"],
+["Floral Lavender","Libre, Yves Saint Laurent"],
+["Floral Jasmine","Bloom, Gucci"],
+["Floral Clementine","Signature, Mont Blanc"],
+["Floral Cassis","Si, Giorgio Armani"],
+["Floral Berry","Divine, Jean Paul Gaultier"],
+["Floral Bergamot","Si Passione Eclat, Giorgio Armani"],
+["Floral Almond","Good Girl, Carolina Herrera"],
+["Currant Benzoin","Matière Noire, Louis Vuitton"],
+["Coconut Vanilla","Alien Goddess, Thierry Mugler"],
+["Clementine Jasmine","Cinema, Yves Saint Laurent"],
+["Citrusy Magnolia","Vénus Intense, Nina Ricci"],
+["Citrusy Jasmine","My Way Nectar, Giorgio Armani"],
+["Caviar Vanillian","Libre Vanille Couture, Yves Saint Laurent"],
+["Caraway Almond","Hypnotic Poison, Dior"],
+["Blossom Vanilla","Addict EDP, Dior"],
+["Blood Orange Jasmine","L'Interdit Rouge, Givenchy"],
+["Black Cherry Amber","Carmina, Creed"],
+["Bergamot Peony","Good Girl Blush, Carolina Herrera"],
+];
+
+const UNISEX = [
+["Sage Sea Salt","Wood Sage & Sea Salt, Jo Malone"],
+["Woody Vetiver","Dawn, Frederic Malle"],
+["Woody Tonka","Angels' Share, By Kilian"],
+["Woody Sandal","Royal Oud, Giorgio Armani"],
+["Woody Saffron","Oud For Greatness, Initio"],
+["Woody Rose","Tiger Oud, Roberto Cavalli"],
+["Woody Pepper","Kalan, Parfums de Marly"],
+["Woody Oud","Oud Wood, Tom Ford"],
+["Woody Orange","Purple Oud, Dior"],
+["Woody Magnolia","Blue Sapphire, Boadicea The Victorious"],
+["Woody Lemon","Royal Oud, Creed"],
+["Woody Ginger","Tam Dao, Craftier"],
+["Woody Cinnamon","X, Clive Christian"],
+["Woody Cedar","Oud Ispahan, Dior"],
+["Woody Balsam Fir","Matsukita, Clive Christian"],
+["Woody Amber","The Night, Frederic Malle"],
+["Violet Vanilla","Layton, Parfums de Marly"],
+["Velvet Sandalwood","Stronger With You Sandalwood, Giorgio Armani"],
+["Velvet Leather","Eragon, Parfums de Marly"],
+["Vanille Tobacco","Tobacco Vanille, Tom Ford"],
+["Vanilla Sandalwood","Dark Vanilla, Montale"],
+["Sweety Patchouli","Patchouli Magnetik, Maison Crivelli"],
+["Sweety Cherry","Lost Cherry, Tom Ford"],
+["Spicy Peach","Bitter Peach, Tom Ford"],
+["Spicy Patchouli","The Voice of the Snake, Gucci"],
+["Spicy Orchid","Black Orchid, Tom Ford"],
+["Spicy Cinnamon","Ambre Nuit Esprit de Parfum, Dior"],
+["Smokey Tobacco","Smoking Hot, By Kilian"],
+["Smokey Cherry","Cherry Smoke, Tom Ford"],
+["Rosy Frankincense","Guidance 46, Amouage"],
+["Rosemary Leather","Imperial Valley, Gissah"],
+["Rose Vanilla","Roses Vanille, Mancera"],
+["Raspberry Leather","Tuscan Leather, Tom Ford"],
+["Praline Woody","Oud Bouquet, Lancome"],
+["Powdery Magnolia","Vibrato, Sospiro"],
+["Pepper Tuberose","Supreme Bouquet, Yves Saint Laurent"],
+["Palisander Rosewood","Oud Rosewood, Dior"],
+["Oudy Patchouli","Oud Voyager, Tom Ford"],
+["Oud Leather","Irish Oud, Memo Paris"],
+["Oriental Leather","Halfeti Leather, Penhaligons"],
+["Oriental Cinnamon","Side Effect, Initio"],
+["Olibanum Vanilla","Vanille Fatale, Tom Ford"],
+["Olibanum Peony","Black Lacquer, Tom Ford"],
+["Olibanum Papyrus","Purpose 50, Amouage"],
+["Mystikal Olibanum","Purpose, Amouage"],
+["Musky Vanilla","Vanille Antique, Byredo"],
+["Musky Pineapple","Accento, Sospiro"],
+["Musky Amber","Stellar Times, Louis Vuitton"],
+["Minty Orange","Pacific Chill, Louis Vuitton"],
+["Mango Caramel","Tango, Gissah"],
+["Mandarin Tuberose","Marfa, Memo Paris"],
+["Mandarin Elemi","Ocean Leather, Memo Paris"],
+["Grapefruit Patchouli","Gris, Dior"],
+["Grapefruit Cedar","Hacivat, Nishane"],
+["Gardenia Vanilla","Hundred Silent Ways, Nishane"],
+["Fruity Saffron","Black Saffron, Byredo"],
+["Fruity Musk","Dolce Melodia, Sospiro"],
+["Fruity Leather","Craftier"],
+["Fruity Cherry","Rouge Trafalgar Esprit de Parfum, Dior"],
+["Fruity Amber","Erba Pura, Sospiro"],
+["Fresh Pear","Blue Talisman, Ex Nihilo"],
+["Floral Amber","High Frequency, Initio"],
+["Fig Tobacco","The Noir 29, Le Labo"],
+["Elemi Ambergris","Outlands, Amouage"],
+["Cinnamon Patchouli","Red Tobacco, Mancera"],
+["Cinnamon Amber","Alexandria II, Xerjoff"],
+["Cashmeran Tobacco","Sellier, Byredo"],
+["Cardamom Myrrh","Lustre, Amouage"],
+["Cardamom Leather","Santal 33, Le Labo"],
+["Aromatic Orange","Percival, Parfums de Marly"],
+["Aromatic Jasmine","Helen Legacy, Gissah"],
+["Aromatic Almond","Fabulous, Tom Ford"],
+["Aquatic Cedar","Megamare, Orto Parisi"],
+["Apple Ambroxan","Apple Brandy On The Rocks, By Kilian"],
+["Ambrette Hibiscus","Hibiscus Mahajad, Maison Crivelli"],
+["Ambery Sandalwood","Alexandria II Anniversary, Xerjoff"],
+["Ambery Rose","Hudson Valley, Gissah"],
+["Ambery Raspberry","So Amber, Montale"],
+["Ambery Pineapple","Purple Accento, Xerjoff"],
+["Ambery Pepper","Interlude, Amouage"],
+["Ambery Leather","Ombre Leather 16, Tom Ford"],
+["Ambery Lavender","DGVIB3 EDP, Craftier"],
+["Ambery Honey","Velvet Honey Santal, Dolce & Gabbana"],
+["Ambery Grapefruit","Ambre Nuit, Dior"],
+["Ambery Cedar","Baccarat Rouge 540, Francis Kurkdjian"],
+["Ambery Bergamot","Tuxedo, Yves Saint Laurent"],
+["Amber Raspberry","Ombre Nomade, Louis Vuitton"],
+["Amber Lavender","Stronger With You Amber, Giorgio Armani"],
+];
+
+const MEN = [
+["Green Lavender","Fresh, Dunhill"],
+["Woody Vanilla","Stronger With You Oud, Giorgio Armani"],
+["Woody Nutmeg","1 Million Golden Oud, Paco Rabanne"],
+["Woody Cypress","Guilty Absolute, Gucci"],
+["Woody Chestnut","Gentleman EDP Reserve Privée, Givenchy"],
+["Vetiver Styrax","Jazz Club, Maison Martin Margiela"],
+["Velvet Tonka","Armani Code Parfum, Giorgio Armani"],
+["Tonka Lavender","Invictus Victory Elixir, Paco Rabanne"],
+["Toffee Sage","Stronger With You Intensely, Giorgio Armani"],
+["Toffee Cardamom","The Most Wanted, Azzaro"],
+["Sweety Tonka","Le Male Elixir, Jean Paul Gaultier"],
+["Spicy Lavender","Born In Roma Extradose Uomo, Valentino"],
+["Spicy Ginger","L'Homme, Yves Saint Laurent"],
+["Spicy Chestnut","Stronger With You, Giorgio Armani"],
+["Spicy Cardamom","Declaration, Cartier"],
+["Spicy Benzoin","1 Million Royal, Paco Rabanne"],
+["Spicy Amber","1 Million, Paco Rabanne"],
+["Spiced Plum","Le Male Elixir Absolu, Jean Paul Gaultier"],
+["Sage Vanilla","Uomo Intense, Valentino"],
+["Pepper Plum","Bad Boy Cobalt Electrique, Carolina Herrera"],
+["Oriental Iris","Le Male Le Parfum, Jean Paul Gaultier"],
+["Orange Pepper","Terre D'Hermes, Hermes"],
+["Orange Patchouli","Myslf Le Parfum, Yves Saint Laurent"],
+["Orange Black Tea","Imagination, Louis Vuitton"],
+["Olibanum Amber","Invictus Victory, Paco Rabanne"],
+["Nutsy Vanilla","Stronger With You Parfum, Giorgio Armani"],
+["Musky Geranium","Paradigme, Prada"],
+["Musky Bergamot","Fahrenheit, Dior"],
+["Minted Vanilla","Le Male, Jean Paul Gaultier"],
+["Mint Caraway","Ultra Male, Jean Paul Gaultier"],
+["Mandarin Vanilla","Code Absolu, Giorgio Armani"],
+["Mandarin Caramel","Scandal Pour Homme, Jean Paul Gaultier"],
+["Lemon Vetiver","Elysium Parfum, Roja Dove"],
+["Lemon Geranium","Eros, Versace"],
+["Lemon Cedar","L'Eau D'Issey, Issey Miyake"],
+["Lavender Apple","Phantom, Paco Rabanne"],
+["Juniper Nutmeg","Guilty Parfum, Gucci"],
+["Juniper Cedar","Y EDP Intense, Yves Saint Laurent"],
+["Iris Patchouli","Homme Parfum 2025, Dior"],
+["Green Galbanum","Silver Mountain Water, Creed"],
+["Grapefruit Musk","Tygar, Bvlgari"],
+["Grapefruit Mint","Invictus Platinum, Paco Rabanne"],
+["Gingery Cedarwood","LV Lovers, Louis Vuitton"],
+["Ginger Vanilla","The Most Wanted Parfum, Azzaro"],
+["Ginger Orange","Stronger With You Freeze, Giorgio Armani"],
+["Fruity Tonka","One Million Elixir, Paco Rabanne"],
+["Fruity Bergamot","Aventus, Creed"],
+["Fresh Spicy","K, Craftier"],
+["Fig Lemon","K EDP Intense, Craftier"],
+["Cloves Musk","Opulent Shaik Classic No 77, Shaik"],
+["Citrusy Vetiver","Explorer Extreme, Mont Blanc"],
+["Citrusy Leather","Boss Bottled Beyond, Hugo Boss"],
+["Citrus White Musk","Allure Sport, Chanel"],
+["Citrus Pepper","Bleu De, Chanel"],
+["Citrus Orange Blossom","Myslf, Yves Saint Laurent"],
+["Citrus Nutmeg","Homme Sport 2017, Dior"],
+["Citrus Mandarin","Invictus, Paco Rabanne"],
+["Citrus Lavender","212, Carolina Herrera"],
+["Citrus Grapefruit","L.12 White, Lacoste"],
+["Citrus Cyclamen","Chrome, Azzaro"],
+["Citrus Bergamot","Acqua Di Giò, Giorgio Armani"],
+["Cinnamon Tobacco","Spicebomb Extreme, Viktor&Rolf"],
+["Cinnamon Musk","Althair, Parfums de Marly"],
+["Chestnut Leather","Stronger With You Leather, Giorgio Armani"],
+["Cedary Vanilla","Stronger With You Absolutely, Giorgio Armani"],
+["Cardamom Tobacco","Stronger With You Tobacco, Giorgio Armani"],
+["Cardamom Lavender","Sauvage Elixir, Dior"],
+["Cardamom Amber","Bleu Noir, Narciso Rodriguez"],
+["Bergamot Vetiver","Uomo Born In Roma Green Stravaganza, Valentino"],
+["Bergamot Pepper","Sauvage, Dior"],
+["Bergamot Orange","Afternoon Swim, Louis Vuitton"],
+["Bergamot Coconut","Le Beau, Jean Paul Gaultier"],
+["Aromatic Vetiver","Valentino Uomo Born In Roma Intense, Valentino"],
+["Aromatic Sea","Acqua Di Giò Profondo, Giorgio Armani"],
+["Aromatic Sage","Y Eau De Parfum, Yves Saint Laurent"],
+["Aromatic Rosemary","Platinum, Chanel"],
+["Aromatic Passionfruit","212 VIP, Carolina Herrera"],
+["Aromatic Leather","Bad Boy Elixir, Carolina Herrera"],
+["Aromatic Geranium","Acqua Di Giò Profumo, Giorgio Armani"],
+["Aromatic Fougere","212 VIP Black, Carolina Herrera"],
+["Aromatic Cardamom","La Nuit, Yves Saint Laurent"],
+["Aquatic Cucumber","Polo Blue, Ralph Lauren"],
+["Ambrette Cedar","Homme Intense, Dior"],
+["Ambery Tobacco","Afgano, Nasomatto"],
+["Ambery Suede","L'Homme Parfum Intense, Yves Saint Laurent"],
+["Ambery Patchouli","Invictus Victory Absolu, Paco Rabanne"],
+["Ambery Labdanum","Bleu De L'Exclusif, Chanel"],
+["Amber Neroli","The One, Craftier"],
+];
+
+/* ===================== SCENT FAMILY ENGINE ===================== */
+
+const KEYWORD_MAP = {
+  wood:"woody", woody:"woody", cedar:"woody", cedary:"woody", cedarwood:"woody", sandal:"woody", sandalwood:"woody",
+  vetiver:"woody", oud:"woody", oudy:"woody", patchouli:"woody", leather:"woody", tobacco:"woody", cypress:"woody",
+  palisander:"woody", rosewood:"woody", chestnut:"woody", styrax:"woody", fir:"woody", papyrus:"woody", suede:"woody",
+  floral:"floral", rose:"floral", rosy:"floral", jasmine:"floral", magnolia:"floral", magnolian:"floral", gardenia:"floral",
+  peony:"floral", violet:"floral", iris:"floral", orchid:"floral", lavender:"floral", lavendery:"floral", tuberose:"floral",
+  freesia:"floral", geranium:"floral", cyclamen:"floral", marigold:"floral", neroli:"floral", hibiscus:"floral",
+  vanilla:"sweet", vanille:"sweet", vanillian:"sweet", caramel:"sweet", honey:"sweet", praline:"sweet", toffee:"sweet",
+  tonka:"sweet", almond:"sweet", coconut:"sweet", sweety:"sweet", caviar:"sweet", marshmallow:"sweet",
+  citrus:"citrus", citrusy:"citrus", lemon:"citrus", bergamot:"citrus", orange:"citrus", grapefruit:"citrus",
+  mandarin:"citrus", clementine:"citrus", mint:"citrus", minty:"citrus",
+  spicy:"spicy", spiced:"spicy", cardamom:"spicy", cinnamon:"spicy", ginger:"spicy", gingery:"spicy", pepper:"spicy",
+  nutmeg:"spicy", cloves:"spicy", saffron:"spicy", caraway:"spicy",
+  amber:"amber", ambery:"amber", olibanum:"amber", elemi:"amber", myrrh:"amber", incense:"amber", frankincense:"amber",
+  benzoin:"amber", balsam:"amber", opoponax:"amber", mystikal:"amber", labdanum:"amber",
+  musky:"musky", musk:"musky", ambrette:"musky", cashmeran:"musky", ambroxan:"musky", petalia:"musky",
+  aromatic:"aromatic", green:"aromatic", galbanum:"aromatic", juniper:"aromatic", rosemary:"aromatic", fougere:"aromatic", sage:"aromatic",
+  aquatic:"aquatic", sea:"aquatic", cucumber:"aquatic",
+  fruity:"fruity", berry:"fruity", raspberry:"fruity", currant:"fruity", cassis:"fruity", litchi:"fruity", peach:"fruity",
+  plum:"fruity", apple:"fruity", pear:"fruity", fig:"fruity", pineapple:"fruity", mango:"fruity", cherry:"fruity",
+  mahonial:"fruity", passionfruit:"fruity",
+  powdery:"powdery", orris:"powdery",
+};
+
+const FAMILY_LABEL = { woody:"Woody", floral:"Floral", sweet:"Sweet & Gourmand", citrus:"Citrus & Fresh", spicy:"Spicy",
+  amber:"Amber & Oriental", musky:"Musky", aromatic:"Aromatic & Green", aquatic:"Aquatic", fruity:"Fruity",
+  powdery:"Powdery", other:"Uncategorized" };
+
+const FAMILY_COLOR = { woody:"#8A6C39", floral:"#C1637A", sweet:"#C99A4D", citrus:"#9BB26A", spicy:"#B5563C",
+  amber:"#B87F2E", musky:"#7C8FA8", aromatic:"#6E9A7C", aquatic:"#5E93A6", fruity:"#B8577A", powdery:"#A896B0", other:"#6B7A72" };
+
+const COMPAT = {
+  woody:["floral","citrus","spicy","amber","fruity"],
+  floral:["woody","musky","fruity","powdery","citrus"],
+  sweet:["spicy","woody","amber","musky"],
+  citrus:["woody","aromatic","floral","aquatic"],
+  spicy:["sweet","woody","amber"],
+  amber:["spicy","sweet","woody"],
+  musky:["floral","sweet","fruity"],
+  aromatic:["citrus","woody","aquatic"],
+  aquatic:["citrus","aromatic","musky"],
+  fruity:["musky","floral","woody"],
+  powdery:["floral","woody"],
+  other:[],
+};
+
+const HEAVY = new Set(["woody","amber","musky","spicy","sweet"]);
+
+function familiesOf(name) {
+  const words = name.toLowerCase().split(/\s+/);
+  const tags = [];
+  for (const w of words) {
+    const clean = w.replace(/[^a-z]/g, "");
+    const fam = KEYWORD_MAP[clean];
+    if (fam && !tags.includes(fam)) tags.push(fam);
+  }
+  return tags.length ? tags : ["other"];
+}
+
+function slug(gender, name) {
+  return gender + "-" + name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+}
+
+const CATALOG = [
+  ...WOMEN.map(([name, insp]) => ({ id: slug("women", name), name, inspiredBy: insp, gender: "Women", tags: familiesOf(name) })),
+  ...UNISEX.map(([name, insp]) => ({ id: slug("unisex", name), name, inspiredBy: insp, gender: "Unisex", tags: familiesOf(name) })),
+  ...MEN.map(([name, insp]) => ({ id: slug("men", name), name, inspiredBy: insp, gender: "Men", tags: familiesOf(name) })),
+];
+
+const ALL_FAMILIES = Object.keys(FAMILY_LABEL).filter((f) => f !== "other");
+
+/* Starting collection — actual full bottles and testers on hand in Dubai and Italy.
+   Used only the first time the app loads (no saved data yet). */
+const SEED_COLLECTION = {
+  "unisex-woody-oud": { full: true, tester: false, rating: 0, note: "Dubai · workhorse full bottle" },
+  "unisex-sweety-cherry": { full: true, tester: false, rating: 0, note: "Dubai" },
+  "unisex-vanille-tobacco": { full: true, tester: false, rating: 0, note: "Dubai" },
+  "unisex-ambery-leather": { full: true, tester: false, rating: 0, note: "Dubai" },
+  "unisex-woody-saffron": { full: false, tester: true, rating: 0, note: "Dubai tester · test priority #1" },
+  "unisex-mystikal-olibanum": { full: false, tester: true, rating: 0, note: "Dubai tester · test priority #2" },
+  "unisex-olibanum-papyrus": { full: false, tester: true, rating: 0, note: "Dubai tester · test priority #3" },
+  "unisex-cardamom-myrrh": { full: false, tester: true, rating: 0, note: "Dubai tester · test priority #4" },
+  "unisex-elemi-ambergris": { full: false, tester: true, rating: 0, note: "Dubai tester · test priority #5" },
+  "unisex-rosy-frankincense": { full: false, tester: true, rating: 0, note: "Dubai tester · test priority #6" },
+  "unisex-ambery-grapefruit": { full: true, tester: false, rating: 0, note: "Italy" },
+  "unisex-woody-cedar": { full: true, tester: false, rating: 0, note: "Italy" },
+  "unisex-woody-orange": { full: true, tester: false, rating: 0, note: "Italy" },
+  "unisex-palisander-rosewood": { full: true, tester: false, rating: 0, note: "Italy" },
+  "unisex-grapefruit-patchouli": { full: true, tester: false, rating: 0, note: "Italy" },
+};
+
+/* ===================== VISUAL SYSTEM ===================== */
+
+const C = {
+  bg: "#12201B",
+  bgAlt: "#0D1815",
+  card: "#1B2C25",
+  cardAlt: "#213329",
+  border: "#2E4438",
+  borderSoft: "#25382E",
+  gold: "#C99A4D",
+  goldDim: "#8A6C39",
+  rose: "#C1637A",
+  text: "#EDE6D9",
+  textMuted: "#9FB2A4",
+  textFaint: "#5E7268",
+};
+
+const FONT_IMPORT = `@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');`;
+
+function DropletRating({ value, onChange, size = 18, readOnly = false }) {
+  return (
+    <div style={{ display: "flex", gap: 4 }}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button
+          key={n}
+          type="button"
+          disabled={readOnly}
+          onClick={(e) => { e.stopPropagation(); onChange && onChange(n === value ? 0 : n); }}
+          style={{
+            background: "none", border: "none", padding: 3, lineHeight: 0,
+            cursor: readOnly ? "default" : "pointer", borderRadius: 5,
+          }}
+          aria-label={`Rate ${n} of 5 droplets`}
+        >
+          <Droplet
+            size={size}
+            color={n <= value ? C.gold : C.textMuted}
+            fill={n <= value ? C.gold : "none"}
+            strokeWidth={1.75}
+          />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function FamilyStamp({ tags }) {
+  const primary = tags[0];
+  return (
+    <div
+      title={tags.map((t) => FAMILY_LABEL[t]).join(" · ")}
+      style={{
+        width: 34, height: 34, borderRadius: "50%", flexShrink: 0,
+        border: `1.5px solid ${FAMILY_COLOR[primary]}`,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        background: "radial-gradient(circle at 35% 30%, rgba(255,255,255,0.06), transparent 60%)",
+        color: FAMILY_COLOR[primary], fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 600,
+      }}
+    >
+      {FAMILY_LABEL[primary].slice(0, 2).toUpperCase()}
+    </div>
+  );
+}
+
+function TicketCard({ item, owned, children }) {
+  const isOwned = owned && (owned.full || owned.tester);
+  return (
+    <div
+      style={{
+        position: "relative",
+        background: isOwned ? C.cardAlt : C.card,
+        border: `1px solid ${isOwned ? C.gold + "55" : C.border}`,
+        borderRadius: 10,
+        padding: "14px 14px 12px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 10,
+      }}
+    >
+      <div style={{
+        position: "absolute", top: -1, left: 12, right: 12, height: 6,
+        backgroundImage: `radial-gradient(circle, ${C.bg} 2.2px, transparent 2.3px)`,
+        backgroundSize: "10px 10px", backgroundPosition: "0 -4px",
+      }} />
+      <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+        <FamilyStamp tags={item.tags} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 16.5, color: C.text, lineHeight: 1.15 }}>
+            {item.name}
+          </div>
+          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10.5, color: C.textMuted, marginTop: 4, lineHeight: 1.4 }}>
+            {item.inspiredBy}
+          </div>
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/* ===================== PAIRING ENGINE ===================== */
+
+function scorePair(a, b, ratings) {
+  const rA = ratings[a.id] || 0;
+  const rB = ratings[b.id] || 0;
+  const shared = a.tags.some((t) => b.tags.includes(t));
+  const compatible = a.tags.some((t) => (COMPAT[t] || []).some((c) => b.tags.includes(c)));
+  const familyScore = compatible ? 3 : shared ? 1 : 0.4;
+  const effA = rA || 3, effB = rB || 3;
+  const ratingScore = (effA + effB) / 2 - 3;
+  const bothRated = rA > 0 && rB > 0;
+  const total = familyScore * 2 + ratingScore * 3 + (bothRated ? 1 : 0);
+  return { total, shared, compatible, rA, rB };
+}
+
+function weightClass(item) {
+  return item.tags.some((t) => HEAVY.has(t)) ? "heavy" : "light";
+}
+
+function pairingAdvice(a, b, meta) {
+  const wa = weightClass(a), wb = weightClass(b);
+  let structure;
+  if (wa !== wb) {
+    const base = wa === "heavy" ? a : b;
+    const top = wa === "heavy" ? b : a;
+    structure = `Spray ${base.name} on chest and pulse points first as your base, then add ${top.name} on wrists or hair about a minute later so it sits on top as the brighter layer.`;
+  } else if (wa === "heavy") {
+    structure = `Both scents are rich and heavy. Apply ${a.name} on one pulse point (chest) and ${b.name} on another (wrist), rather than stacking them in the same spot, so neither one gets muddied.`;
+  } else {
+    structure = `Both scents are light. These can be sprayed together in the same area, or mixed on your palms, for a brighter blended accord.`;
+  }
+  let ratingNote = "";
+  if (meta.rA > 0 && meta.rB > 0) {
+    const avg = (meta.rA + meta.rB) / 2;
+    if (avg >= 4.5) ratingNote = "Two of your top-rated scents — this is a strong candidate for a signature combo.";
+    else if (avg <= 2.5) ratingNote = "Both of these are rated low for you. Worth trying once, but don't be surprised if it doesn't land.";
+    else ratingNote = "A solid, middle-of-the-road pairing based on how you've rated these so far.";
+  } else if (meta.rA > 0 || meta.rB > 0) {
+    ratingNote = "One of these is still unrated — rate it after wearing this combo to sharpen future suggestions.";
+  } else {
+    ratingNote = "Neither scent is rated yet. Try this pairing and rate both afterward so advice can adapt.";
+  }
+  const famNote = meta.compatible
+    ? `${FAMILY_LABEL[a.tags[0]]} and ${FAMILY_LABEL[b.tags[0]]} are a classic complementary pairing.`
+    : meta.shared
+    ? `These share a ${FAMILY_LABEL[a.tags.find((t) => b.tags.includes(t))]} note, so they'll blend safely rather than contrast.`
+    : `These are an unconventional pairing across families — more experimental, less predictable.`;
+  return { structure, ratingNote, famNote };
+}
+
+/* ===================== MAIN APP ===================== */
+
+function App() {
+  const [collection, setCollection] = useState({});
+  const [loaded, setLoaded] = useState(false);
+  const [saveError, setSaveError] = useState(false);
+  const [tab, setTab] = useState("browse");
+  const [search, setSearch] = useState("");
+  const [genderFilter, setGenderFilter] = useState("All");
+  const [familyFilter, setFamilyFilter] = useState("All");
+  const [ownedOnlyAdvisor, setOwnedOnlyAdvisor] = useState(true);
+  const [advisorResults, setAdvisorResults] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      let existing = null;
+      try {
+        const res = await window.storage.get("perfume-collection", true);
+        if (res && res.value) existing = JSON.parse(res.value);
+      } catch (e) {}
+      if (existing) {
+        setCollection(existing);
+      } else {
+        setCollection(SEED_COLLECTION);
+        try { await window.storage.set("perfume-collection", JSON.stringify(SEED_COLLECTION), true); } catch (e) {}
+      }
+      setLoaded(true);
+    })();
+  }, []);
+
+  const persist = useCallback(async (next) => {
+    setCollection(next);
+    try {
+      const res = await window.storage.set("perfume-collection", JSON.stringify(next), true);
+      setSaveError(!res);
+    } catch (e) {
+      setSaveError(true);
+    }
+  }, []);
+
+  const toggleOwned = (id, kind) => {
+    const cur = collection[id] || { full: false, tester: false, rating: 0 };
+    const next = { ...cur, [kind]: !cur[kind] };
+    const updated = { ...collection };
+    if (!next.full && !next.tester) {
+      delete updated[id];
+    } else {
+      updated[id] = next;
+    }
+    persist(updated);
+  };
+
+  const setRating = (id, rating) => {
+    const cur = collection[id];
+    if (!cur) return;
+    persist({ ...collection, [id]: { ...cur, rating } });
+  };
+
+  const ratings = useMemo(() => {
+    const r = {};
+    Object.entries(collection).forEach(([id, v]) => { r[id] = v.rating || 0; });
+    return r;
+  }, [collection]);
+
+  const ownedItems = useMemo(
+    () => CATALOG.filter((c) => collection[c.id] && (collection[c.id].full || collection[c.id].tester)),
+    [collection]
+  );
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return CATALOG.filter((c) => {
+      if (genderFilter !== "All" && c.gender !== genderFilter) return false;
+      if (familyFilter !== "All" && !c.tags.includes(familyFilter)) return false;
+      if (q && !c.name.toLowerCase().includes(q) && !c.inspiredBy.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [search, genderFilter, familyFilter]);
+
+  const generateAdvice = () => {
+    const pool = ownedOnlyAdvisor ? ownedItems : CATALOG;
+    if (pool.length < 2) { setAdvisorResults([]); return; }
+    const pairs = [];
+    for (let i = 0; i < pool.length; i++) {
+      for (let j = i + 1; j < pool.length; j++) {
+        const meta = scorePair(pool[i], pool[j], ratings);
+        pairs.push({ a: pool[i], b: pool[j], meta });
+      }
+    }
+    const wellRated = pairs.filter((p) => (p.meta.rA === 0 || p.meta.rA >= 3) && (p.meta.rB === 0 || p.meta.rB >= 3));
+    const usable = wellRated.length >= 5 ? wellRated : pairs;
+    usable.sort((x, y) => y.meta.total - x.meta.total);
+    setAdvisorResults(usable.slice(0, 6));
+  };
+
+  const lowRated = useMemo(
+    () => ownedItems.filter((i) => (collection[i.id] && collection[i.id].rating || 0) > 0 && collection[i.id].rating <= 2),
+    [ownedItems, collection]
+  );
+
+  const tabs = [
+    { id: "browse", label: "Browse Catalog" },
+    { id: "collection", label: `My Collection (${ownedItems.length})` },
+    { id: "advisor", label: "Layering Advisor" },
+  ];
+
+  return (
+    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "system-ui, -apple-system, sans-serif" }}>
+      <style>{`
+        ${FONT_IMPORT}
+        * { box-sizing: border-box; }
+        ::selection { background: ${C.gold}55; }
+        button { font-family: inherit; }
+        input:focus, button:focus-visible, select:focus-visible { outline: 2px solid ${C.gold}; outline-offset: 2px; }
+        @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+      `}</style>
+
+      <header style={{ padding: "36px 20px 22px", borderBottom: `1px solid ${C.borderSoft}`, background: `linear-gradient(180deg, ${C.bgAlt}, ${C.bg})` }}>
+        <div style={{ maxWidth: 980, margin: "0 auto" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, letterSpacing: "0.14em", color: C.gold, textTransform: "uppercase" }}>
+            <FlaskConical size={14} /> Personal Fragrance Ledger
+          </div>
+          <h1 style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: "clamp(28px, 4vw, 40px)", margin: "8px 0 6px", letterSpacing: "-0.01em" }}>
+            The Cabinet
+          </h1>
+          <p style={{ color: C.textMuted, fontSize: 14.5, maxWidth: 560, lineHeight: 1.5, margin: 0 }}>
+            Track every bottle and tester from the Craftier catalog, rate what you wear, and get layering pairings
+            that shift as your ratings do.
+          </p>
+        </div>
+      </header>
+
+      <nav style={{ maxWidth: 980, margin: "0 auto", padding: "18px 20px 0", display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            style={{
+              padding: "9px 16px", borderRadius: 999, border: `1px solid ${tab === t.id ? C.gold : C.border}`,
+              background: tab === t.id ? C.gold : "transparent", color: tab === t.id ? C.bgAlt : C.textMuted,
+              fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, fontWeight: 600, cursor: "pointer",
+              letterSpacing: "0.02em",
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </nav>
+
+      <main style={{ maxWidth: 980, margin: "0 auto", padding: "20px 20px 60px" }}>
+        {!loaded && <div style={{ color: C.textFaint, padding: 40, textAlign: "center" }}>Opening the cabinet…</div>}
+
+        {loaded && tab === "browse" && (
+          <BrowseTab
+            filtered={filtered} search={search} setSearch={setSearch}
+            genderFilter={genderFilter} setGenderFilter={setGenderFilter}
+            familyFilter={familyFilter} setFamilyFilter={setFamilyFilter}
+            collection={collection} toggleOwned={toggleOwned} setRating={setRating}
+          />
+        )}
+
+        {loaded && tab === "collection" && (
+          <CollectionTab ownedItems={ownedItems} collection={collection} toggleOwned={toggleOwned} setRating={setRating} />
+        )}
+
+        {loaded && tab === "advisor" && (
+          <AdvisorTab
+            ownedItems={ownedItems} ownedOnlyAdvisor={ownedOnlyAdvisor} setOwnedOnlyAdvisor={setOwnedOnlyAdvisor}
+            generateAdvice={generateAdvice} advisorResults={advisorResults} lowRated={lowRated}
+          />
+        )}
+
+        {saveError && (
+          <div style={{ marginTop: 16, fontSize: 12.5, color: C.rose, fontFamily: "'IBM Plex Mono', monospace" }}>
+            Couldn't save that change — check your connection and try again.
+          </div>
+        )}
+      </main>
+
+      <footer style={{ borderTop: `1px solid ${C.borderSoft}`, padding: "16px 20px", textAlign: "center", color: C.textFaint, fontSize: 11.5, fontFamily: "'IBM Plex Mono', monospace" }}>
+        Collection data syncs across every device that opens this site.
+      </footer>
+    </div>
+  );
+}
+
+/* ===================== BROWSE TAB ===================== */
+
+function BrowseTab({ filtered, search, setSearch, genderFilter, setGenderFilter, familyFilter, setFamilyFilter, collection, toggleOwned, setRating }) {
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+        <div style={{ position: "relative", flex: "1 1 220px" }}>
+          <Search size={15} color={C.textFaint} style={{ position: "absolute", left: 11, top: 11 }} />
+          <input
+            value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search scent name or inspiration…"
+            style={{
+              width: "100%", padding: "9px 12px 9px 32px", borderRadius: 8, border: `1px solid ${C.border}`,
+              background: C.card, color: C.text, fontSize: 13.5,
+            }}
+          />
+        </div>
+        <select value={genderFilter} onChange={(e) => setGenderFilter(e.target.value)} style={selectStyle}>
+          {["All", "Women", "Men", "Unisex"].map((g) => <option key={g} value={g}>{g}</option>)}
+        </select>
+        <select value={familyFilter} onChange={(e) => setFamilyFilter(e.target.value)} style={selectStyle}>
+          <option value="All">All Families</option>
+          {ALL_FAMILIES.map((f) => <option key={f} value={f}>{FAMILY_LABEL[f]}</option>)}
+        </select>
+      </div>
+
+      <div style={{ fontSize: 12, color: C.textFaint, marginBottom: 10, fontFamily: "'IBM Plex Mono', monospace" }}>
+        {filtered.length} of {CATALOG.length} scents
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 12 }}>
+        {filtered.map((item) => {
+          const owned = collection[item.id];
+          return (
+            <TicketCard key={item.id} item={item} owned={owned}>
+              <div style={{ display: "flex", gap: 8 }}>
+                <OwnButton label="Full Bottle" active={owned && owned.full} onClick={() => toggleOwned(item.id, "full")} />
+                <OwnButton label="Tester" active={owned && owned.tester} onClick={() => toggleOwned(item.id, "tester")} />
+              </div>
+              {owned && (owned.full || owned.tester) && (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: 11, color: C.textFaint, fontFamily: "'IBM Plex Mono', monospace" }}>Your rating</span>
+                  <DropletRating value={owned.rating || 0} onChange={(v) => setRating(item.id, v)} />
+                </div>
+              )}
+            </TicketCard>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function OwnButton({ label, active, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
+        padding: "7px 8px", borderRadius: 7, border: `1px solid ${active ? C.gold : C.border}`,
+        background: active ? C.gold + "22" : "transparent", color: active ? C.gold : C.textMuted,
+        fontSize: 11.5, fontFamily: "'IBM Plex Mono', monospace", fontWeight: 600, cursor: "pointer",
+      }}
+    >
+      {active ? <Check size={12} /> : <Plus size={12} />} {label}
+    </button>
+  );
+}
+
+const selectStyle = {
+  padding: "9px 10px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.card, color: C.text,
+  fontSize: 13, fontFamily: "'IBM Plex Mono', monospace",
+};
+
+/* ===================== COLLECTION TAB ===================== */
+
+function CollectionTab({ ownedItems, collection, toggleOwned, setRating }) {
+  if (ownedItems.length === 0) {
+    return (
+      <EmptyState
+        title="Your cabinet is empty"
+        body="Head to Browse Catalog and mark a scent as a Full Bottle or Tester to start tracking it here."
+      />
+    );
+  }
+
+  const grouped = {};
+  ownedItems.forEach((item) => {
+    const fam = item.tags[0];
+    grouped[fam] = grouped[fam] || [];
+    grouped[fam].push(item);
+  });
+
+  return (
+    <div>
+      {Object.entries(grouped).map(([fam, items]) => (
+        <div key={fam} style={{ marginBottom: 26 }}>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 8, marginBottom: 10,
+            fontFamily: "'IBM Plex Mono', monospace", fontSize: 11.5, letterSpacing: "0.1em",
+            color: FAMILY_COLOR[fam], textTransform: "uppercase",
+          }}>
+            <span style={{ width: 8, height: 8, borderRadius: "50%", background: FAMILY_COLOR[fam] }} />
+            {FAMILY_LABEL[fam]} — {items.length}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 12 }}>
+            {items.map((item) => {
+              const owned = collection[item.id];
+              const low = owned.rating > 0 && owned.rating <= 2;
+              return (
+                <TicketCard key={item.id} item={item} owned={owned}>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {owned.full && <Badge>Full Bottle</Badge>}
+                    {owned.tester && <Badge>Tester</Badge>}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div>
+                      <div style={{ fontSize: 10.5, color: C.textFaint, fontFamily: "'IBM Plex Mono', monospace", marginBottom: 3 }}>
+                        Your rating
+                      </div>
+                      <DropletRating value={owned.rating || 0} onChange={(v) => setRating(item.id, v)} />
+                    </div>
+                    <button
+                      onClick={() => { toggleOwned(item.id, "full"); if (owned.full) toggleOwned(item.id, "tester"); }}
+                      style={{ background: "none", border: "none", color: C.textFaint, cursor: "pointer", padding: 4 }}
+                      title="Remove from collection"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                  {owned.note && (
+                    <div style={{ fontSize: 11, color: C.textFaint, fontFamily: "'IBM Plex Mono', monospace" }}>
+                      {owned.note}
+                    </div>
+                  )}
+                  {low && (
+                    <div style={{ fontSize: 11, color: C.rose, fontFamily: "'IBM Plex Mono', monospace" }}>
+                      Low rated — consider skipping this in layering combos.
+                    </div>
+                  )}
+                </TicketCard>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Badge({ children }) {
+  return (
+    <span style={{
+      fontSize: 10.5, fontFamily: "'IBM Plex Mono', monospace", padding: "3px 8px", borderRadius: 999,
+      border: `1px solid ${C.goldDim}`, color: C.gold, letterSpacing: "0.03em",
+    }}>
+      {children}
+    </span>
+  );
+}
+
+/* ===================== ADVISOR TAB ===================== */
+
+function AdvisorTab({ ownedItems, ownedOnlyAdvisor, setOwnedOnlyAdvisor, generateAdvice, advisorResults, lowRated }) {
+  return (
+    <div>
+      <div style={{
+        background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18, marginBottom: 18,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, color: C.gold, fontFamily: "'IBM Plex Mono', monospace", fontSize: 11.5, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+          <Sparkles size={14} /> How layering advice adapts
+        </div>
+        <p style={{ color: C.textMuted, fontSize: 13.5, lineHeight: 1.6, margin: "0 0 10px" }}>
+          Pairings are ranked by scent-family compatibility first, then re-weighted by how you've rated each
+          scent — combinations of two favorites climb to the top, and pairs involving a scent you've rated 2
+          droplets or lower get filtered out once you have enough rated scents to work with.
+        </p>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: C.text, cursor: "pointer" }}>
+          <input type="checkbox" checked={ownedOnlyAdvisor} onChange={(e) => setOwnedOnlyAdvisor(e.target.checked)} />
+          Only suggest pairings from my collection
+        </label>
+      </div>
+
+      <button
+        onClick={generateAdvice}
+        style={{
+          display: "flex", alignItems: "center", gap: 8, padding: "11px 18px", borderRadius: 9,
+          border: "none", background: C.gold, color: C.bgAlt, fontFamily: "'IBM Plex Mono', monospace",
+          fontWeight: 700, fontSize: 13, cursor: "pointer", marginBottom: 20,
+        }}
+      >
+        <Wind size={15} /> Generate Layering Reading
+      </button>
+
+      {lowRated.length > 0 && (
+        <div style={{ fontSize: 12.5, color: C.rose, marginBottom: 16, fontFamily: "'IBM Plex Mono', monospace" }}>
+          {lowRated.length} scent{lowRated.length > 1 ? "s" : ""} in your collection {lowRated.length > 1 ? "are" : "is"} rated 2 or below —
+          these get deprioritized in suggestions once you have more rated scents.
+        </div>
+      )}
+
+      {advisorResults === null && (
+        <EmptyState title="No reading yet" body="Press Generate Layering Reading to see pairings drawn from your cabinet." />
+      )}
+
+      {advisorResults && advisorResults.length === 0 && (
+        <EmptyState title="Not enough scents" body="Own at least two scents (full bottle or tester) to get a layering suggestion, or toggle off 'only my collection' above." />
+      )}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {advisorResults && advisorResults.map((p, idx) => {
+          const advice = pairingAdvice(p.a, p.b, p.meta);
+          return (
+            <div key={idx} style={{ background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+                <span style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 17 }}>{p.a.name}</span>
+                <span style={{ color: C.gold, fontFamily: "'IBM Plex Mono', monospace" }}>+</span>
+                <span style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 17 }}>{p.b.name}</span>
+              </div>
+              <p style={{ margin: "0 0 8px", color: C.text, fontSize: 13.5, lineHeight: 1.55 }}>{advice.structure}</p>
+              <p style={{ margin: "0 0 8px", color: C.textMuted, fontSize: 12.5, lineHeight: 1.5 }}>{advice.famNote}</p>
+              <p style={{ margin: 0, color: C.gold, fontSize: 12.5, lineHeight: 1.5, fontStyle: "italic" }}>{advice.ratingNote}</p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ title, body }) {
+  return (
+    <div style={{ textAlign: "center", padding: "50px 20px", border: `1px dashed ${C.border}`, borderRadius: 12, color: C.textMuted }}>
+      <div style={{ fontFamily: "'Fraunces', serif", fontSize: 19, color: C.text, marginBottom: 6 }}>{title}</div>
+      <div style={{ fontSize: 13.5, maxWidth: 380, margin: "0 auto", lineHeight: 1.5 }}>{body}</div>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App />);
+</script>
+</body>
+</html>
